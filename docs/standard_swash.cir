@@ -1,0 +1,131 @@
+* 4ms Standard Swash (Max Tweaker family) - netlist ricostruita dal layout veroboard
+* "4ms Standard Swash" di Alex / tagboardeffects.blogspot.com (basato su Swash 2.2)
+* Verifica: 61 tagli, 32 ponticelli, 58 componenti, 4 IC (TL062, TL072, 2x 4558)
+* Nomi nodo = quelli usati nel motore (engine/SwashCircuit.cpp)
+* Potenziometri come reostati: p = posizione 0..1 (orario = 1)
+*
+* Nel motore (engine/SwashEngine.cpp) la netlist e' equivalente ma semplificata dove e' esatto farlo:
+*  - R e C in serie (C1+R1, R4+C2, C9+R13, C11+R17, C12+1k, C1u_f+47k) come un unico elemento
+*  - R5+PreGain, R14+PostGain, Sw1+SelfOsc in serie come un'unica resistenza
+*  - interruttori di preclip/postclip: i diodi esistono solo a interruttore chiuso
+* e con queste approssimazioni dichiarate:
+*  - 4,7 nF parassiti sulla linea VLOW
+*  - R2, R7, R16 leggono VLOW con un campione di ritardo (~5 us a 192 kHz)
+*  - LFO e ramo clean come sotto-circuiti accoppiati con un campione di ritardo
+*
+* --- Alimentazione -------------------------------------------------------
+* V9   : +9V adattatore (C 100u verso massa)
+* LOW  : 1k B, pin2 <- Sw2-2 (Trouble: +9V diretto / Tame: +9V via Sw5-8), pin3 -> VLOW
+RLOW   V9sw VLOW   {(1-pLow)*1k}
+* VLOW alimenta TL062 (pin8), TL072 (pin8) e le polarizzazioni R2, R7, R16
+*
+* --- Ingresso -------------------------------------------------------------
+* IN = Sw5-3 (bypass 3PDT) = SelfOsc pin1
+R19    IN   0      1M
+C1     IN   C1N    1u
+R1     C1N  U1P    10k
+R2     VLOW U1P    220k
+R3     U1P  0      220k
+* --- U1A TL062: pregain non invertente ------------------------------------
+XU1A   U1P U1N U1O VLOW 0  TL062
+R4     U1N  C2N    1k
+C2     C2N  0      {Tame ? 10n : 10u}      ; Sw2 polo B (pin 4/6, comune 5 = massa)
+R5     U1O  PG     10k
+RPRE   PG   U1N    {pPre*1M}               ; PreGain B1M pin1-2
+* --- U1B TL062: comparatore ad anello aperto ("swash") ---------------------
+R6     U1O  UBN    10k
+C3     U1O  UBN    1u
+R7     VLOW UBP    470k
+RGATE  UBP  0      {pGate*10k}             ; Gate B10k
+RSWASH UBN  UBP    {pSwash*10k}            ; Swash B10k (pin1 su -, cursore su +)
+D1     UBN  PRE    1N914
+D2     PRE  UBN    1N914                   ; [mod] LED rosso (Eurorack)
+SW4    PRE  UBO    {PreClip}
+XU1B   UBP UBN UBO VLOW 0  TL062
+C4     UBO  A      1u
+* --- Nodo A: iniezione LFO (Sw6 polo B) e [aggiunta] Mood CV ----------------
+SW6B   A    LFOJ   {LfoOn}
+R100b  LFOJ LBO    100
+C10u_c LFOJ LBO    10u
+* --- Tone Standard (Bass / Treble B100k) -----------------------------------
+C10n_b A    X      10n
+R10k_e X    O      10k
+RTRT   X    O      {(1-pTreble)*100k}      ; Treble pin3-2
+RTRB   O    Y      {pTreble*100k}          ; Treble pin2-1
+R1k_d  O    Y      1k
+C100n_c Y   0      100n
+R4k7   A    B3     4.7k
+C33n   B3   B2     33n
+RBAT   B3   B2     {(1-pBass)*100k}        ; Bass pin3-2
+R1k_e  B2   O      1k
+C100n_d B2  B1     100n
+RBAB   B2   B1     {pBass*100k}            ; Bass pin2-1
+R100c  B1   0      100
+* --- U2A TL072: postgain invertente + postclip ------------------------------
+C9     O    C9N    100n
+R13    C9N  U2N    10k
+R16    VLOW BIAS2  100k
+R15    BIAS2 0     100k
+XU2A   BIAS2 U2N U2O VLOW 0  TL072
+R14    U2O  PST    10k
+RPOST  PST  U2N    {pPost*1M}              ; PostGain B1M
+C10    U2O  C10N   100n
+SW3    C10N PCL    {PostClip}
+D3     U2N  PCL    1N914
+D4     PCL  U2N    1N914
+* --- U2B TL072: Noise vol ----------------------------------------------------
+C11    U2O  C11N   1u
+R17    C11N UBN2   1k
+XU2B   BIAS2 UBN2 U2BO VLOW 0  TL072
+RNOISE U2BO UBN2   {pNoise*10k}            ; Noise B10k
+C330p  U2BO UBN2   330p
+C12    U2BO C12N   1u
+R1k_g  C12N N      1k
+R1M_b  N    0      1M
+* --- Self-oscillation (Sw1 + SelfOsc B1M, pin 2-3 uniti) ----------------------
+SW1    N    SO     {SelfOscOn}
+RSO    SO   IN     {pSelfOsc*1M}
+* --- Clean (4558 B, alimentato dai +9V sempre presenti) -------------------
+C1u_f  IN   CL1    1u
+R47k_a CL1  U3N    47k
+R220d  BIAS3 0     220k
+R220e  V9   BIAS3  220k
+XU3    BIAS3 U3N U3O V9 0  JRC4558
+RCLEAN U3O  U3N    {pClean*1M}             ; Clean B1M
+C1u_g  U3O  CL2    1u
+R47k_b CL2  M      47k
+R47k_c N    M      47k
+* --- Master B100k e uscita (Sw5-6) --------------------------------------------
+RMT    M    W      {(1-pMaster)*100k}
+RMB    W    0      {pMaster*100k}
+R1k_h  W    OUT    1k
+* --- LFO (4558 A): oscillatore a rilassamento + buffer --------------------------
+SW6A   V9   VCCL   {LfoOn}                 ; Sw6 polo A: alimentazione LFO
+R470b  VCCL LP     470k
+R470c  LP   0      470k
+R100k_a LAO LP     100k
+C1n    LAO  LN     1n
+R220c  LN   S      220k
+XLA    LP LN LAO VCCL 0  JRC4558
+R100a  LAO  SPD    100
+RSPD   SPD  S      {(1-pSpeed)*100k}       ; Speed B100k pin2-3
+C10u_b S    0      10u
+XLB    S LBO LBO VCCL 0  JRC4558           ; inseguitore
+R1k_c  LBO  LEDM   1k
+DLED   LBO  LEDM   LED_RED                 ; Speed LED
+R1k_f  LEDM 0      1k
+* (4558 B, pin 5-6-7 non usati)
+*
+* --- Aggiunte dal Noise Swash Eurorack (CV) --------------------------------
+* Mood CV: sorgente 0..15V con 1k serie sul nodo A (il jack Mood dell'Eurorack e' sul nodo dopo C4)
+* Swash CV: U3A TL072 (-100k/15k) -> 220 + trimmer -> LED vactrol
+*   CV positivo -> LDR1 tra uscita Tone (O) e pin3 virtuale dello Swash (-> UBP)
+*   CV negativo -> LDR2 tra pin1 dello Swash (UBN) e massa
+LDR1   O    LDR1N  {Rldr1}
+RSW3   LDR1N UBP   {(1-pSwash)*10k}
+LDR2   UBN  0      {Rldr2}
+*
+* --- Mod "Tone Eurorack" (sostituisce il blocco Tone Standard) --------------
+* C7 A XE 10n ; R10 XE 0 4k7 ; R8 A CE 4k7 ; C5 CE 0 {100n | 10n}
+* TONE pin3=XE pin1=CE cursore=O (10k B) ; C9 = 1u
+.end
