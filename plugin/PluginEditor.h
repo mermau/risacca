@@ -23,9 +23,16 @@ public:
     PedalToggle (RisaccaAudioProcessor& p, int paramIndex, Kind k, const juce::String& text = {});
     void paintButton (juce::Graphics& g, bool over, bool down) override;
     void mouseDown (const juce::MouseEvent& e) override;
+    void clicked() override { shownState = getToggleState(); }
+    // footswitch premuto via MIDI/host: lo mostra abbassato per qualche frame
+    void tickPress();
     const int index;
     bool learning = false;
 private:
+    void paintFootswitch (juce::Graphics& g, bool down);
+    void paintLever (juce::Graphics& g);
+    bool shownState = false;
+    int pressFrames = 0;
     RisaccaAudioProcessor& proc;
     Kind kind;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> att;

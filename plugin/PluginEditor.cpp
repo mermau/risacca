@@ -71,61 +71,181 @@ void PedalToggle::mouseDown (const juce::MouseEvent& e)
     juce::Button::mouseDown (e);
 }
 
-void PedalToggle::paintButton (juce::Graphics& g, bool over, bool)
+void PedalToggle::tickPress()
 {
+    if (kind != footswitch) return;
+    if (getToggleState() != shownState)          // cambiato da MIDI o dall'host, non dal mouse
+    {
+        shownState = getToggleState();
+        pressFrames = 5;                         // ~170 ms abbassato a 30 Hz
+        repaint();
+    }
+    else if (pressFrames > 0 && --pressFrames == 0)
+        repaint();
+}
+
+namespace
+{
+juce::ColourGradient chromeGrad (juce::Point<float> c, float r, float darken = 0.0f)
+{
+    juce::ColourGradient cg (juce::Colours::white.darker (darken), c.x - 0.35f * r, c.y - 0.45f * r,
+                             juce::Colour (0xff4f5358).darker (darken), c.x + 0.9f * r, c.y + 0.9f * r, true);
+    cg.addColour (0.35, juce::Colour (0xffd8dadd).darker (darken));
+    cg.addColour (0.75, juce::Colour (0xff85898f).darker (darken));
+    return cg;
+}
+juce::Rectangle<float> disc (juce::Point<float> p, float r) { return juce::Rectangle<float> (2 * r, 2 * r).withCentre (p); }
+}
+
+void PedalToggle::paintFootswitch (juce::Graphics& g, bool down)
+{
+    // Vista dall'alto, luce fissa in alto a sinistra. Premendo, il pulsante scende dentro
+    // la ghiera: si accorciano la parete laterale visibile e l'ombra che proietta nel foro.
+    using namespace juce;
+    const auto b = getLocalBounds().toFloat();
+    const auto c = b.getCentre();
+    const float R = jmin (b.getWidth(), b.getHeight()) * 0.5f;
+
+    Path hex;   // dado esagonale
+    for (int i = 0; i < 6; ++i)
+    {
+        const auto p = c.getPointOnCircumference (R * 0.96f, (float) i * MathConstants<float>::pi / 3.0f);
+        if (i == 0) hex.startNewSubPath (p); else hex.lineTo (p);
+    }
+    hex.closeSubPath();
+    g.setColour (Colours::black.withAlpha (0.35f));
+    g.fillPath (hex, AffineTransform::translation (1.5f, 3.0f));
+    g.setGradientFill (chromeGrad (c, R, 0.25f));
+    g.fillPath (hex);
+    g.setColour (Colours::black.withAlpha (0.3f));
+    g.strokePath (hex, PathStrokeType (1.0f));
+
+    const float ring = R * 0.68f, hole = R * 0.55f, rp = R * 0.47f;   // ghiera e foro
+    g.setGradientFill (chromeGrad (c, ring, 0.3f));
+    g.fillEllipse (disc (c, ring));
+    g.setColour (Colours::black.withAlpha (0.25f));
+    g.drawEllipse (disc (c, ring), 1.0f);
+    g.setGradientFill (ColourGradient (Colour (0xff050506), c.x - hole * 0.6f, c.y - hole * 0.6f,
+                                       Colour (0xff2a2c30), c.x + hole * 0.7f, c.y + hole * 0.8f, false));
+    g.fillEllipse (disc (c, hole));
+
+    const float h = R * (down ? 0.03f : 0.11f);   // altezza del pulsante sopra la ghiera
+    const auto top = c.translated (0.0f, -h);
+    {
+        Graphics::ScopedSaveState ss (g);
+        Path clip; clip.addEllipse (disc (c, hole));
+        g.reduceClipRegion (clip);
+        const auto sc = c.translated (h * 0.9f, h * 1.2f);
+        for (int i = 0; i < 6; ++i)
+        {
+            g.setColour (Colours::black.withAlpha (0.16f));
+            g.fillEllipse (disc (sc, rp + (float) i * R * 0.012f));
+        }
+    }
+    {
+        Path wall;   // parete laterale del cilindro
+        wall.addEllipse (disc (c, rp));
+        wall.addRectangle (c.x - rp, top.y, 2 * rp, c.y - top.y);
+        g.setGradientFill (ColourGradient (Colour (0xff9a9ea4), c.x - rp, c.y, Colour (0xff3b3e43), c.x + rp, c.y, false));
+        g.fillPath (wall);
+    }
+    ColourGradient face (Colour (0xfffbfbfc), top.x - rp * 0.45f, top.y - rp * 0.5f,
+                         Colour (0xff5f6369), top.x + rp * 0.9f, top.y + rp * 0.95f, true);
+    face.addColour (0.30, Colour (0xffe2e4e7));
+    face.addColour (0.70, Colour (0xff9da1a7));
+    g.setGradientFill (face);
+    g.fillEllipse (disc (top, rp));
+    g.setColour (Colours::white.withAlpha (0.55f));
+    g.drawEllipse (disc (top, rp - 0.8f), 1.0f);
+    g.setColour (Colours::black.withAlpha (0.25f));
+    {
+        Path rim; rim.addCentredArc (top.x, top.y, rp - 0.5f, rp - 0.5f, 0.0f,
+                                     MathConstants<float>::pi * 0.65f, MathConstants<float>::pi * 1.35f, true);
+        g.strokePath (rim, PathStrokeType (1.2f));
+    }
+    g.setColour (Colours::white.withAlpha (0.45f));
+    g.fillEllipse (Rectangle<float> (rp * 0.55f, rp * 0.32f).withCentre (top.translated (-rp * 0.32f, -rp * 0.38f)));
+}
+
+void PedalToggle::paintLever (juce::Graphics& g)
+{
+    // Deviatore a levetta visto dall'alto: la levetta sta quasi in piedi e si inclina di circa
+    // 25 gradi verso l'alto (acceso) o verso il basso (spento), come su un pedale vero.
+    using namespace juce;
     const auto b = getLocalBounds().toFloat();
     const auto c = b.getCentre();
     const bool on = getToggleState();
+    const float r = jmin (b.getWidth(), b.getHeight()) * 0.22f;
+
+    Path hex;   // dado esagonale
+    for (int i = 0; i < 6; ++i)
+    {
+        const float a = MathConstants<float>::twoPi * (float) i / 6.0f + 0.52f;
+        const auto p = c.getPointOnCircumference (r * 1.35f, a + MathConstants<float>::halfPi);
+        if (i == 0) hex.startNewSubPath (p); else hex.lineTo (p);
+    }
+    hex.closeSubPath();
+    g.setColour (Colours::black.withAlpha (0.25f));
+    g.fillPath (hex, AffineTransform::translation (1.5f, 2.0f));
+    g.setGradientFill (ColourGradient (Colour (0xffeef0f2), c.x - r, c.y - r, Colour (0xff80868d), c.x + r, c.y + r, false));
+    g.fillPath (hex);
+    g.setColour (Colour (0xff5d6268));
+    g.strokePath (hex, PathStrokeType (0.8f));
+    // boccola filettata con il foro
+    g.setGradientFill (chromeGrad (c, r * 0.78f, 0.35f));
+    g.fillEllipse (disc (c, r * 0.78f));
+    g.setColour (Colour (0xff1c1d20));
+    g.fillEllipse (disc (c, r * 0.5f));
+
+    const float tilt = degreesToRadians (25.0f);
+    const float len = b.getHeight() * 0.44f;              // lunghezza reale della levetta
+    const float reach = len * std::sin (tilt);            // quanto si sposta vista dall'alto
+    const float height = len * std::cos (tilt);           // quanto sta in alto: allunga l'ombra
+    const float dir = on ? -1.0f : 1.0f;
+    const Point<float> tip (c.x, c.y + dir * reach);
+    const float wBase = r * 0.40f, wTip = r * 0.62f;      // la punta è più vicina all'osservatore
+
+    // ombra proiettata sul pannello (luce in alto a sinistra)
+    const Point<float> sh (height * 0.12f, height * 0.16f);
+    {
+        Path s;
+        s.startNewSubPath (c.x - wBase * 0.5f, c.y);
+        s.lineTo (c.x + wBase * 0.5f, c.y);
+        s.lineTo (tip.x + sh.x + wTip * 0.5f, tip.y + sh.y);
+        s.lineTo (tip.x + sh.x - wTip * 0.5f, tip.y + sh.y);
+        s.closeSubPath();
+        g.setColour (Colours::black.withAlpha (0.22f));
+        g.fillPath (s);
+        g.fillEllipse (disc (tip + sh, r * 0.5f));
+    }
+    // stelo rastremato
+    Path shaft;
+    shaft.startNewSubPath (c.x - wBase * 0.5f, c.y);
+    shaft.lineTo (c.x + wBase * 0.5f, c.y);
+    shaft.lineTo (tip.x + wTip * 0.5f, tip.y);
+    shaft.lineTo (tip.x - wTip * 0.5f, tip.y);
+    shaft.closeSubPath();
+    g.setGradientFill (ColourGradient (Colour (0xfff7f8f9), c.x - wTip * 0.5f, c.y, Colour (0xff767c83), c.x + wTip * 0.5f, c.y, false));
+    g.fillPath (shaft);
+    // pomello all'estremità
+    const float rb = r * 0.5f;
+    ColourGradient ball (Colour (0xffffffff), tip.x - rb * 0.4f, tip.y - rb * 0.45f,
+                         Colour (0xff6c727a), tip.x + rb, tip.y + rb, true);
+    ball.addColour (0.4, Colour (0xffd5d9dd));
+    g.setGradientFill (ball);
+    g.fillEllipse (disc (tip, rb));
+    g.setColour (Colour (0xff5f656c));
+    g.drawEllipse (disc (tip, rb), 0.7f);
+}
+
+void PedalToggle::paintButton (juce::Graphics& g, bool, bool down)
+{
+    const auto b = getLocalBounds().toFloat();
+    const bool on = getToggleState();
     if (kind == toggle)
-    {
-        // dado esagonale cromato + levetta "a mazza"
-        const float r = juce::jmin (b.getWidth(), b.getHeight()) * 0.22f;
-        juce::Path hex;
-        for (int i = 0; i < 6; ++i)
-        {
-            const float a = juce::MathConstants<float>::twoPi * (float) i / 6.0f + 0.52f;
-            const float px = c.x + std::cos (a) * r * 1.35f, py = c.y + std::sin (a) * r * 1.35f;
-            if (i == 0) hex.startNewSubPath (px, py); else hex.lineTo (px, py);
-        }
-        hex.closeSubPath();
-        g.setColour (juce::Colours::black.withAlpha (0.25f));
-        g.fillPath (hex, juce::AffineTransform::translation (1.5f, 2.0f));
-        juce::ColourGradient hg (juce::Colour (0xffeef0f2), c.x - r, c.y - r, juce::Colour (0xff80868d), c.x + r, c.y + r, false);
-        g.setGradientFill (hg);
-        g.fillPath (hex);
-        g.setColour (juce::Colour (0xff5d6268));
-        g.strokePath (hex, juce::PathStrokeType (0.8f));
-        g.setColour (juce::Colour (0xff3a3d42));
-        g.fillEllipse (c.x - r * 0.55f, c.y - r * 0.55f, r * 1.1f, r * 1.1f);
-        // levetta: su = acceso
-        const float len = b.getHeight() * 0.36f;
-        const float dir = on ? -1.0f : 1.0f;
-        const juce::Point<float> tip (c.x, c.y + dir * len);
-        g.setColour (juce::Colours::black.withAlpha (0.3f));
-        g.drawLine (c.x + 2.0f, c.y + 2.0f, tip.x + 2.0f, tip.y + 2.0f, r * 0.55f);
-        juce::ColourGradient lg (juce::Colour (0xfff7f8f9), c.x - r * 0.3f, c.y, juce::Colour (0xff8a9097), c.x + r * 0.3f, c.y, false);
-        g.setGradientFill (lg);
-        juce::Path lever;
-        lever.addLineSegment ({ c, tip }, r * 0.5f);
-        g.fillPath (lever);
-        g.fillEllipse (tip.x - r * 0.42f, tip.y - r * 0.42f, r * 0.84f, r * 0.84f);
-        g.setColour (juce::Colour (0xff6a7076));
-        g.drawEllipse (tip.x - r * 0.42f, tip.y - r * 0.42f, r * 0.84f, r * 0.84f, 0.7f);
-    }
+        paintLever (g);
     else if (kind == footswitch)
-    {
-        const float r = juce::jmin (b.getWidth(), b.getHeight()) * 0.46f;
-        g.setColour (juce::Colours::black.withAlpha (0.3f));
-        g.fillEllipse (c.x - r + 2.0f, c.y - r + 3.0f, 2 * r, 2 * r);
-        look::chromeCap (g, c, r);
-        const float r2 = r * 0.62f;
-        juce::ColourGradient cg (juce::Colour (0xff8d939a), c.x - r2, c.y - r2, juce::Colour (0xfff2f4f6), c.x + r2, c.y + r2, false);
-        g.setGradientFill (cg);
-        g.fillEllipse (c.x - r2, c.y - r2, 2 * r2, 2 * r2);
-        g.setColour (juce::Colour (0xff60656b));
-        g.drawEllipse (c.x - r2, c.y - r2, 2 * r2, 2 * r2, 1.0f);
-        if (over) { g.setColour (juce::Colours::white.withAlpha (0.12f)); g.fillEllipse (c.x - r, c.y - r, 2 * r, 2 * r); }
-    }
+        paintFootswitch (g, down || pressFrames > 0);
     else // pulsante del pannello posteriore
     {
         auto rr = b.reduced (1.0f);
@@ -459,6 +579,7 @@ void PedalFace::showBackPanel (bool show)
 
 void PedalFace::tick()
 {
+    if (foot != nullptr) foot->tickPress();
     const float on = proc.meters.on.load(), lfo = proc.meters.lfo.load(), mood = proc.meters.mood.load();
     if (std::abs (on - ledOn) > 0.01f || std::abs (lfo - ledLfo) > 0.02f || std::abs (mood - ledMood) > 0.02f)
     {

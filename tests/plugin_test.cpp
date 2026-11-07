@@ -59,6 +59,26 @@ int main (int argc, char** argv)
             juce::PNGImageFormat().writeImageToStream (img, os);
             std::printf ("screenshot: %s\n", f.getFullPathName().toRawUTF8());
         }
+        // dettaglio ingrandito: levetta spenta/accesa, footswitch a riposo/premuto
+        {
+            auto* rp = dynamic_cast<RisaccaAudioProcessor*> (p.get());
+            juce::Image img (juce::Image::ARGB, 4 * 200, 220, true);
+            juce::Graphics g (img);
+            g.fillAll (juce::Colour (0xffe8e6df));
+            for (int i = 0; i < 4; ++i)
+            {
+                const bool foot = i >= 2;
+                PedalToggle t (*rp, foot ? pid::engaged : pid::preclip,
+                               foot ? PedalToggle::footswitch : PedalToggle::toggle);
+                if (foot) t.setBounds (0, 0, 66, 66); else t.setBounds (0, 0, 40, 62);
+                if (! foot) t.setToggleState (i == 1, juce::dontSendNotification);
+                juce::Graphics::ScopedSaveState ss (g);
+                g.addTransform (juce::AffineTransform::scale (3.0f).translated ((float) (i * 200 + (foot ? 1 : 40)), 14.0f));
+                t.paintButton (g, false, foot && i == 3);
+            }
+            juce::File f (juce::String (argv[1]) + "_detail.png");
+            f.deleteFile(); juce::FileOutputStream os (f); juce::PNGImageFormat().writeImageToStream (img, os);
+        }
     }
     p->releaseResources();
     return 0;
