@@ -67,4 +67,4 @@ Al primo avvio la mappa CC è quella di una KeyLab mkII in modalità User:
 
 Ogni controllo (anche interruttori e pedale) si assegna con **tasto destro → MIDI Learn**.
 
-Il manuale completo è in `docs/MANUALE.md`.
+Il manuale d'uso per musicisti è in `docs/RISACCA-Manuale-d-uso.pdf`; le note tecniche sul circuito e sul motore sono in `docs/MANUALE.md`.

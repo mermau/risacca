@@ -52,7 +52,7 @@ int main (int argc, char** argv)
                 for (auto* c : ed->getChildren())
                     if (auto* face = dynamic_cast<PedalFace*> (c)) { face->showBackPanel (true); face->tick(); }
 
-            auto img = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f);
+            auto img = ed->createComponentSnapshot (ed->getLocalBounds(), true, argc > 2 ? (float) std::atof (argv[2]) : 1.0f);
             juce::File f (juce::String (argv[1]) + (pass == 0 ? "_front.png" : "_back.png"));
             f.deleteFile();
             juce::FileOutputStream os (f);
