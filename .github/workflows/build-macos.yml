@@ -1,11 +1,17 @@
 # Compila RISACCA su un Mac di GitHub (Apple Silicon) e pubblica VST3 + AU + Standalone.
 # Avvio: a ogni push sul ramo main, oppure a mano da "Actions" > "Build macOS" > "Run workflow".
+# Quando si pubblica una release, lo zip validato e il manuale vengono allegati alla release.
 name: Build macOS
 
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
+  release:
+    types: [ published ]
+
+permissions:
+  contents: write
 
 jobs:
   macos:
@@ -61,3 +67,11 @@ jobs:
           auval -v aumf Rsca Mmin
           $PV --strictness-level 7 --validate-in-process --skip-gui-tests --timeout-ms 600000 \
               --validate ~/Library/Audio/Plug-Ins/Components/"RISACCA.component"
+
+      - name: Allega alla release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            RISACCA-macOS.zip docs/RISACCA-Manuale-d-uso.pdf --clobber --repo "${{ github.repository }}"
