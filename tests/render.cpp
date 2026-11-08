@@ -26,6 +26,8 @@ int main(int argc, char** argv) {
     for (int i = 4; i < argc; ++i) if (std::string(argv[i]) == "dso=1") e.delaySelfOsc = true;
     e.prepare(fs, 1);
     SwashControls c;
+    double inAmp = 1.0;
+    long lfoEdges = 0;   // amp=x scala il segnale di prova
     // parametri da riga di comando key=val
     for (int i = 4; i < argc; ++i) {
         char k[64]; double v; if (sscanf(argv[i], "%63[^=]=%lf", k, &v) != 2) continue;
@@ -39,6 +41,7 @@ int main(int argc, char** argv) {
         else if (key == "engaged") c.engaged = v > 0.5; else if (key == "mood") { c.moodPatched = true; c.moodV = v; }
         else if (key == "cv") c.swashCV = v; else if (key == "led") c.modLedPreclip = v > 0.5; else if (key == "tone") c.modTone = (int)v;
         else if (key == "seed") e.setSeed((uint32_t)v);
+        else if (key == "amp") inAmp = v;
         else if (key == "src") c.source = (int)v;
         else if (key == "clow") e.clowOverride = v;
         else if (key == "pred") { e.circuit(0).predictor = v > 0.5; e.circuit(1).predictor = v > 0.5; }
@@ -77,7 +80,8 @@ int main(int argc, char** argv) {
             double tt = fmod(t, 1.0); double ph = fmod(tt * 110.0, 1.0);
             vin = 0.3 * exp(-tt * 3.0) * (2.0 * ph - 1.0) * (tt > 0.002);
         } else if (scen == "sine") vin = 0.2 * sin(2 * M_PI * 220 * t);
-        double y = e.process(vin);
+        double y = e.process(vin * inAmp);
+        { static bool lastOn = false; bool on = e.meters().ledLfo > 0.5; if (on && !lastOn) lfoEdges++; lastOn = on; }
         { int li = e.circuit(0).lastIter; hist[std::min(li, 63)]++; }
         raw.push_back((float)y);
         acc += y; if (++cnt == os) { out.push_back((float)(acc / os / 2.0)); acc = 0; cnt = 0; }
@@ -90,6 +94,7 @@ int main(int argc, char** argv) {
     float vmin = 99, vmax = -99; for (size_t i = 300; i < vlow.size(); ++i) { vmin = std::min(vmin, vlow[i]); vmax = std::max(vmax, vlow[i]); }
     printf("%s: rms=%.4f V peak=%.3f V  Vlow[%.2f..%.2f]  iter=%.2f nonconv=%llu  RT=%.2fx\n", scen.c_str(), rms, peak,
            vmin, vmax, e.averageIterations(), (unsigned long long)e.nonConverged(), secs / el);
+    printf("lfo: %.2f Hz\n", lfoEdges / secs);
     printf("nonconv core=%llu lfo=%llu clean=%llu\n", (unsigned long long)e.circuit(0).nonConverged, (unsigned long long)e.lfoCircuit().nonConverged, (unsigned long long)e.cleanCircuit().nonConverged);
     printf("hist:"); for (int k = 0; k < 64; ++k) if (hist[k]) printf(" %d:%ld", k, hist[k]); printf("\n");
     writeWav("out_" + scen + ".wav", out, (int)fsBase);
