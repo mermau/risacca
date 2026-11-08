@@ -27,6 +27,7 @@ endif()
 juce_add_plugin(Risacca
     COMPANY_NAME "Collateral Effects"
     PRODUCT_NAME "RISACCA"
+    ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon.png"
     BUNDLE_ID "it.mminstruments.risacca"
     PLUGIN_MANUFACTURER_CODE Mmin
     PLUGIN_CODE Rsca

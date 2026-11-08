@@ -1,4 +1,8 @@
 #include "PluginEditor.h"
+#if JucePlugin_Build_Standalone
+ #include <juce_audio_utils/juce_audio_utils.h>
+ #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
+#endif
 
 namespace
 {
@@ -624,6 +628,15 @@ RisaccaEditor::RisaccaEditor (RisaccaAudioProcessor& p)
     if (auto* c = getConstrainer()) c->setFixedAspectRatio ((double) PedalFace::W / PedalFace::H);
     setSize (PedalFace::W, PedalFace::H);
     startTimerHz (30);
+
+   #if JucePlugin_Build_Standalone
+    // La versione standalone di JUCE silenzia l'ingresso audio per evitare il feedback: per un
+    // pedale l'ingresso è il punto, quindi lo riattiviamo a ogni apertura (resta disattivabile
+    // dalle impostazioni audio).
+    if (proc.wrapperType == juce::AudioProcessor::wrapperType_Standalone)
+        if (auto* holder = juce::StandalonePluginHolder::getInstance())
+            holder->getMuteInputValue().setValue (false);
+   #endif
 }
 
 RisaccaEditor::~RisaccaEditor()

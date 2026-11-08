@@ -8,6 +8,33 @@ juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter();
 int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI gui;
+    if (argc > 1 && juce::String (argv[1]) == "input")
+    {
+        // chitarra solo sul canale 1 (come un ingresso mono della scheda audio), parametri di serie
+        for (double amp : { 0.0, 0.01, 0.03, 0.1, 0.3 })
+        {
+            std::unique_ptr<juce::AudioProcessor> q (createPluginFilter());
+            q->setPlayConfigDetails (2, 2, 48000.0, 256);
+            q->prepareToPlay (48000.0, 256);
+            juce::AudioBuffer<float> b (2, 256); juce::MidiBuffer m;
+            double sum = 0; long n = 0;
+            for (int blk = 0; blk < (int) (3.0 * 48000 / 256); ++blk)
+            {
+                for (int i = 0; i < 256; ++i)
+                {
+                    const double t = (blk * 256 + i) / 48000.0, tt = std::fmod (t, 1.0);
+                    const double ph = std::fmod (tt * 110.0, 1.0);
+                    b.setSample (0, i, (float) (amp * std::exp (-tt * 3.0) * (2.0 * ph - 1.0)));
+                    b.setSample (1, i, 0.0f);
+                }
+                q->processBlock (b, m);
+                if (blk * 256 > 48000) for (int i = 0; i < 256; ++i) { sum += b.getSample (0, i) * b.getSample (0, i); ++n; }
+            }
+            std::printf ("ingresso picco %.3f (%.0f dBFS): uscita rms %.4f (%.1f dBFS)\n", amp, 20 * std::log10 (std::max (amp, 1e-9)),
+                         std::sqrt (sum / n), 20 * std::log10 (std::sqrt (sum / n) + 1e-12));
+        }
+        return 0;
+    }
     std::unique_ptr<juce::AudioProcessor> p (createPluginFilter());
     auto* rp = dynamic_cast<RisaccaAudioProcessor*> (p.get());
     const double sr = 48000.0; const int bs = 256;
