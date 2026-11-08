@@ -10,7 +10,9 @@ constexpr double kOn = 10.0;      // interruttore chiuso (0.1 ohm)
 constexpr double kOff = 1e-10;    // interruttore aperto
 constexpr double LED_IS = 1e-18, LED_N = 2.0;
 constexpr double D914_IS = 2.52e-9, D914_N = 1.752;
-inline double potR(double total, double pos) { return std::max(total * pos, 0.0) + 1.0; }
+// potenziometro come reostato: pista (valore totale con la sua tolleranza) + resistenza residua
+// agli estremi (al piu' ~20 ohm nei potenziometri a carbone da 16 mm) + contatto del cursore
+inline double potR(double total, double pos) { return std::max(total * pos, 0.0) + std::min(20.0, 2e-4 * total) + 1.0; }
 }
 
 SwashEngine::SwashEngine() {
@@ -210,13 +212,25 @@ void SwashEngine::seedCircuit(Circuit& c, const Circuit& nom, int bank) {
         double t = 1.0 + 0.01 * std::clamp(grand(), -2.5, 2.5);
         c.setG((int)k, nom.res[k].g / t);
     }
+    // condensatori: elettrolitici (da 1 uF in su) +-20% di targa, film e ceramici +-10%
     for (size_t k = 0; k < c.caps.size(); ++k) {
-        double t = 1.0 + 0.05 * std::clamp(grand(), -2.0, 2.0);
+        const double sig = nom.caps[k].c >= 0.99e-6 ? 0.08 : 0.04;
+        double t = 1.0 + sig * std::clamp(grand(), -2.5, 2.5);
         c.setC((int)k, nom.caps[k].c * t);
     }
+    for (size_t k = 0; k < c.srcs.size(); ++k) {
+        const double sig = nom.srcs[k].c >= 0.99e-6 ? 0.08 : 0.04;
+        double t = 1.0 + sig * std::clamp(grand(), -2.5, 2.5);
+        c.setSRC_C((int)k, nom.srcs[k].c * t);
+    }
+    // op-amp: offset, e dispersione tra esemplari di banda, slew rate e corrente di riposo
     for (size_t k = 0; k < c.opamps.size() && k < 16; ++k) {
         auto& op = c.opamps[k];
+        const auto& m0 = nom.opamps[k].m;
         op.vos = op.m.vosSigma * std::clamp(grand(), -2.5, 2.5);
+        op.m.gbw  = m0.gbw  * (1.0 + 0.10 * std::clamp(grand(), -2.0, 2.0));
+        op.m.slew = m0.slew * (1.0 + 0.10 * std::clamp(grand(), -2.0, 2.0));
+        op.m.iq   = m0.iq   * (1.0 + 0.10 * std::clamp(grand(), -2.0, 2.0));
         noiseScale[bank][k] = op.m.noise * std::sqrt(0.5 * fs);
     }
 }
@@ -226,13 +240,19 @@ void SwashEngine::setSeed(uint32_t s) {
     rng = seed * 2654435761u + 12345u; if (rng == 0) rng = 1;
     for (int k = 0; k < 8; ++k) urand();
     { Core t; buildCore(t, false); seedCircuit(core[0]->c, t.c, 0); }
+    // C2 e C5 vengono riscritti dai comandi (Tame/trouble, mod del tono): si conserva la tolleranza
+    core[0]->kC2 = core[0]->c.srcs[core[0]->cC2].c / 10e-6;
     uint32_t keep = rng;
     rng = seed * 2654435761u + 12345u; if (rng == 0) rng = 1;   // stessa sequenza: stesso "esemplare"
     for (int k = 0; k < 8; ++k) urand();
     { Core t; buildCore(t, true); seedCircuit(core[1]->c, t.c, 0); }
+    core[1]->kC2 = core[1]->c.srcs[core[1]->cC2].c / 10e-6;
+    core[1]->kC5 = core[1]->c.caps[core[1]->cC5].c / 100e-9;
     rng = keep;
     { Lfo t; buildLfo(t); seedCircuit(lfo.c, t.c, 1); }
     { Clean t; buildClean(t); seedCircuit(cln.c, t.c, 2); }
+    // potenziometri a carbone: valore totale +-20% di targa
+    for (int k = 0; k < kPots; ++k) potK[k] = 1.0 + 0.07 * std::clamp(grand(), -2.8, 2.8);
     rng = seed ^ 0x9E3779B9u; if (rng == 0) rng = 1;
 }
 
@@ -273,14 +293,14 @@ void SwashEngine::applyControls(Core& V, const SwashControls& s, double dtSec) {
     auto sw = [&](int idx, bool on) { c.setG(idx, on ? kOn : kOff); };
 
     bool powered = s.engaged || !s.tame;
-    c.setG(V.rLow, powered ? 1.0 / ((1.0 - s.low) * 1000.0 + 0.3) : kOff);
+    c.setG(V.rLow, powered ? 1.0 / ((1.0 - s.low) * 1000.0 * potK[kLow] + 3.3) : kOff);
     // sorgente: chitarra (7k + 2.5H, cavo 470p), linea (600 ohm, cavo 100p) o niente collegato
     if (!s.engaged || s.source == 2) { c.setSRL(V.lPickup, 1e12, 1e-5); c.setC(V.cCable, s.source == 2 ? 20e-12 : 470e-12); }
     else if (s.source == 1) { c.setSRL(V.lPickup, 7000.0, 2.5); c.setC(V.cCable, 470e-12); }
     else { c.setSRL(V.lPickup, 600.0, 1e-5); c.setC(V.cCable, 100e-12); }
-    setR(V.rPre, 10e3 + potR(1e6, s.pregain));
-    setR(V.rGate, potR(10e3, s.gate));
-    setR(V.rSwash, potR(10e3, s.swash));
+    setR(V.rPre, 10e3 + potR(1e6 * potK[kPre], s.pregain));
+    setR(V.rGate, potR(10e3 * potK[kGate], s.gate));
+    setR(V.rSwash, potR(10e3 * potK[kSwash], s.swash));
     // preclip / postclip: i diodi esistono solo con l'interruttore chiuso
     const double isD2 = s.modLedPreclip ? 1e-40 : D914_IS, isL = s.modLedPreclip ? LED_IS : 1e-40;
     c.diodes[V.dD1].is = s.preclip ? D914_IS : 1e-40;
@@ -291,23 +311,23 @@ void SwashEngine::applyControls(Core& V, const SwashControls& s, double dtSec) {
     sw(V.rSw6, s.lfoOn);
     c.setG(V.rMood, s.moodPatched ? 1.0 / 1000.0 : kOff);
     if (!V.euro) {
-        setR(V.rTopT, potR(100e3, 1.0 - s.treble));
-        setR(V.rBotT, potR(100e3, s.treble));
-        setR(V.rTopB, potR(100e3, 1.0 - s.bass));
-        setR(V.rBotB, potR(100e3, s.bass));
+        setR(V.rTopT, potR(100e3 * potK[kTreble], 1.0 - s.treble));
+        setR(V.rBotT, potR(100e3 * potK[kTreble], s.treble));
+        setR(V.rTopB, potR(100e3 * potK[kBass], 1.0 - s.bass));
+        setR(V.rBotB, potR(100e3 * potK[kBass], s.bass));
     } else {
-        setR(V.rTopT, potR(10e3, 1.0 - s.treble));
-        setR(V.rBotT, potR(10e3, s.treble));
-        c.setC(V.cC5, (s.modTone == 2) ? 10e-9 : 100e-9);
+        setR(V.rTopT, potR(10e3 * potK[kTreble], 1.0 - s.treble));
+        setR(V.rBotT, potR(10e3 * potK[kTreble], s.treble));
+        c.setC(V.cC5, ((s.modTone == 2) ? 10e-9 : 100e-9) * V.kC5);
     }
-    setR(V.rPost, 10e3 + potR(1e6, s.postgain));
-    setR(V.rNoise, potR(10e3, s.noiseVol));
-    c.setG(V.rSO, s.selfOscOn ? 1.0 / potR(1e6, s.selfOsc) : kOff);
-    setR(V.rMT, potR(100e3, 1.0 - s.master));
-    setR(V.rMB, potR(100e3, s.master));
+    setR(V.rPost, 10e3 + potR(1e6 * potK[kPost], s.postgain));
+    setR(V.rNoise, potR(10e3 * potK[kNoise], s.noiseVol));
+    c.setG(V.rSO, s.selfOscOn ? 1.0 / potR(1e6 * potK[kSO], s.selfOsc) : kOff);
+    setR(V.rMT, potR(100e3 * potK[kMaster], 1.0 - s.master));
+    setR(V.rMB, potR(100e3 * potK[kMaster], s.master));
     if (clowOverride > 0) c.setC(V.cLow, clowOverride);
     // C2: Tame = 10n, Trouble = 10u (Sw2 polo B)
-    c.setSRC_C(V.cC2, s.tame ? 10e-9 : 10e-6);
+    c.setSRC_C(V.cC2, (s.tame ? 10e-9 : 10e-6) * V.kC2);
 
     // vactrol: U3A TL072 (-100k/15k) su +-15V, 220 ohm + trimmer 5k
     double vo = std::min(13.5, 6.6667 * std::fabs(s.swashCV));
@@ -320,13 +340,13 @@ void SwashEngine::applyControls(Core& V, const SwashControls& s, double dtSec) {
         gcur += (tgt - gcur) * std::min(1.0, dtSec / tau);
     };
     lag(ldrG1, t1); lag(ldrG2, t2);
-    c.setG(V.rLdr1, 1.0 / (1.0 / ldrG1 + potR(10e3, 1.0 - s.swash)));   // LDR1 + pin3-cursore dello Swash
+    c.setG(V.rLdr1, 1.0 / (1.0 / ldrG1 + potR(10e3 * potK[kSwash], 1.0 - s.swash)));   // LDR1 + pin3-cursore dello Swash
     c.setG(V.rLdr2, ldrG2);
 
     // LFO e clean
     lfo.c.setG(lfo.rSwPow, s.lfoOn ? kOn : kOff);
-    lfo.c.setG(lfo.rSpeed, 1.0 / potR(100e3, 1.0 - s.lfoSpeed));
-    cln.c.setG(cln.rClean, 1.0 / potR(1e6, s.clean));
+    lfo.c.setG(lfo.rSpeed, 1.0 / potR(100e3 * potK[kSpeed], 1.0 - s.lfoSpeed));
+    cln.c.setG(cln.rClean, 1.0 / potR(1e6 * potK[kClean], s.clean));
 }
 
 void SwashEngine::smoothControls(double dtSec) {

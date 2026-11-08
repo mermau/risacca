@@ -1,3 +1,4 @@
+#include <cstdlib>
 // render.cpp - banco di prova offline del motore (Linux/macOS)
 #include "../engine/SwashEngine.h"
 #include <cstdio>
@@ -25,6 +26,16 @@ int main(int argc, char** argv) {
     SwashEngine e;
     for (int i = 4; i < argc; ++i) if (std::string(argv[i]) == "dso=1") e.delaySelfOsc = true;
     e.prepare(fs, 1);
+    for (int k = 0; k < 2; ++k) {
+        Circuit& cc = e.circuit(k);
+        if (auto* v = std::getenv("R_PRED")) cc.predLimit = std::atof(v);
+        if (auto* v = std::getenv("R_FIRST")) cc.firstMaxIter = std::atoi(v);
+        if (auto* v = std::getenv("R_TOL")) cc.absTol = std::atof(v);
+        if (auto* v = std::getenv("R_MAXIT")) cc.maxIter = std::atoi(v);
+        if (auto* v = std::getenv("R_LS")) cc.lsThreshold = std::atof(v);
+        if (auto* v = std::getenv("R_BIG")) cc.bigStep = std::atof(v);
+        if (auto* v = std::getenv("R_DEPTH")) cc.maxDepth = std::atoi(v);
+    }
     SwashControls c;
     double inAmp = 1.0;
     long lfoEdges = 0;   // amp=x scala il segnale di prova
@@ -97,6 +108,7 @@ int main(int argc, char** argv) {
     printf("lfo: %.2f Hz\n", lfoEdges / secs);
     printf("nonconv core=%llu lfo=%llu clean=%llu\n", (unsigned long long)e.circuit(0).nonConverged, (unsigned long long)e.lfoCircuit().nonConverged, (unsigned long long)e.cleanCircuit().nonConverged);
     printf("hist:"); for (int k = 0; k < 64; ++k) if (hist[k]) printf(" %d:%ld", k, hist[k]); printf("\n");
+    if (std::getenv("R_NOWRITE")) return 0;
     writeWav("out_" + scen + ".wav", out, (int)fsBase);
     { FILE* g = fopen(("raw_" + scen + ".f32").c_str(), "wb"); fwrite(raw.data(), 4, raw.size(), g); fclose(g); }
     FILE* f = fopen(("vlow_" + scen + ".txt").c_str(), "w"); for (float v : vlow) fprintf(f, "%f\n", v); fclose(f);

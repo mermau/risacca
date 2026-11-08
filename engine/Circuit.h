@@ -167,7 +167,7 @@ public:
 
     double theta = 0.55;            // metodo theta (0.5 = trapezi, 1 = Eulero all'indietro)
     int maxIter = 10;
-    int maxDepth = 3;               // suddivisioni del passo (fino a 1/8)
+    int maxDepth = 4;               // suddivisioni del passo (fino a 1/16)
     double absTol = 3e-4;
     double resTol = 1e-4;
     double lsThreshold = 0.1;     // sotto questo passo (V) niente ricerca lineare

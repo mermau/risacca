@@ -63,6 +63,7 @@ private:
         int nOut, nA, nVlow, nIN, nM, nLfoj, rC100, cC10u, nU1P, rR2, rR3, cC1;
         int fV9, fVin, fVmood, fLbo, fU3n, fCl2, fVlowB, fSOin = 0, fSOso = 0, rSO2 = -1, nSO = 0;
         bool euro = false;
+        double kC2 = 1.0, kC5 = 1.0;   // tolleranza di C2 e C5 dell'esemplare
     };
     struct Lfo {
         Circuit c;
@@ -94,6 +95,8 @@ private:
     bool firstControls = true;
     double v9 = 0.0;                     // rampa di accensione
     double ldrG1 = 1e-7, ldrG2 = 1e-7;   // conduttanze vactrol
+    enum { kLow, kPre, kGate, kSwash, kTreble, kBass, kPost, kNoise, kSO, kMaster, kSpeed, kClean, kPots };
+    double potK[kPots] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };   // tolleranza dei potenziometri
     uint32_t seed = 1, rng = 1;
     double noiseScale[3][16] {};
     SwashMeters met;

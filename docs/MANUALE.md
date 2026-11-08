@@ -118,9 +118,10 @@ CC 80) o per automazioni a scalino.
 - **Qualità**:
   - *Standard* (circa 192 kHz interni);
   - *Alta* (circa 384 kHz interni): transitori più fedeli nei fischi acuti, ma il doppio del carico.
-- **Esemplare** (1–999): le tolleranze dei componenti (1% sulle resistenze, 5% sui condensatori) e
-  gli offset degli op-amp. Ogni numero è un "pedale" diverso, sempre lo stesso a ogni apertura del
-  progetto.
+- **Esemplare** (1–999): le tolleranze dei componenti, con la dispersione tipica delle parti vere:
+  resistenze 1%; condensatori film e ceramici ±10% di targa, elettrolitici (da 1 µF in su) ±20%;
+  potenziometri a carbone ±20% sul valore totale; per ogni op-amp offset, banda, slew rate e corrente
+  di riposo (±20%). Ogni numero è un "pedale" diverso, sempre lo stesso a ogni apertura del progetto.
 - **Nuovo esemplare**: ne estrae uno a caso.
 - **Spegni e riaccendi**: stacca e riattacca l'alimentazione. Il circuito riparte da freddo e nei
   primi secondi, mentre C2 si carica, fa cose che non farà più dopo.
@@ -147,9 +148,10 @@ modalità **Toggle** nel MIDI Control Center di Arturia.
 
 - **Generatore**:
   1. Sorgente *Scollegato*, levetta Self-osc su;
-  2. Noisegate e Swash verso sinistra (0–2), Low a 6;
-  3. gira lo Swash con Shift: si passa da toni fissi a pulsazioni e a rumore;
-  4. poi prova il Low e l'LFO.
+  2. Noisegate verso destra (7–10): il circuito trova una voce che pulsa; verso sinistra fischia;
+  3. gira lo Swash con Shift per spostare l'altezza della voce;
+  4. poi prova il Low (verso sinistra la voce diventa un drone stabile) e l'LFO.
+  Il manuale d'uso in PDF ha la mappa completa delle zone e le ricette.
 - **Fuzz**: Sorgente *Chitarra*, Self-osc giù, Pregain 5, Postgain 5, Noise vol 6. Il Noisegate e lo
   Swash decidono quanto del suono "si spezza".
 - **Entrambi**: Self-osc su, con la manopola Self-osc verso destra (poca retroazione). La chitarra
@@ -158,10 +160,26 @@ modalità **Toggle** nel MIDI Control Center di Arturia.
 ## 7. Carico della CPU
 
 Il plugin risolve a ogni campione interno un sistema di circa 25 equazioni non lineari. Il carico
-dipende da cosa fa il circuito:
-- uso come fuzz e oscillazioni gravi: leggero;
-- autooscillazioni acute che sbattono da un'alimentazione all'altra (il fischio a 8–13 kHz, tipico
-  di Tame + Self-osc): il carico può salire di 3–4 volte. Se serve, congela la traccia (*Freeze*).
+dipende da cosa fa il circuito. Misure del motore a 192 kHz interni su un core Xeon a 2,3 GHz
+(un Mac con Apple Silicon è in genere più veloce), in multipli del tempo reale:
+
+| Regime | Tempo reale |
+|---|---|
+| Fuzz con chitarra | circa 3× |
+| Raffiche e droni gravi | circa 2,5× |
+| Tame + Self-osc | circa 1,3× |
+| Rumore pieno con Self-osc (Noisegate e Swash a 5) | circa 0,8× |
+| Fischio altissimo (Noisegate a 0) | circa 0,4× |
+
+Nei regimi più pesanti il circuito commuta da un'alimentazione all'altra più volte per campione, e il
+passo d'integrazione viene suddiviso fino a 1/16. Se serve, congela la traccia (*Freeze*). La qualità
+*Alta* costa il doppio nei regimi leggeri ma circa lo stesso in quelli pesanti, dove è anche più precisa.
+
+Versione 0.2: sono state provate e scartate un'eliminazione statica del blocco lineare (complemento di
+Schur), varianti del predittore, delle tolleranze di Newton e del numero di iterazioni, e
+micro-ottimizzazioni del modello degli op-amp: nessuna dava un guadagno misurabile. Il passo minimo è
+sceso da 1/8 a 1/16: i passi non convergenti (prima circa 200 al secondo nel fischio) sono spariti a
+parità di costo.
 
 ## 8. Limiti noti
 
