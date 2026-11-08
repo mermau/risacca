@@ -36,7 +36,10 @@ jobs:
             cp -R "$b" dist/
           done
           lipo -info "$OUT/VST3/RISACCA.vst3/Contents/MacOS/RISACCA"
-          cp docs/MANUALE.md dist/ 2>/dev/null || true
+          # senza questa voce macOS passa solo silenzio all'ingresso della Standalone
+          plutil -p "$OUT/Standalone/RISACCA.app/Contents/Info.plist" | grep -E "NSMicrophoneUsageDescription|CFBundleIconFile"
+          plutil -p "$OUT/Standalone/RISACCA.app/Contents/Info.plist" | grep -q NSMicrophoneUsageDescription
+          cp docs/RISACCA-Manuale-d-uso.pdf dist/ 2>/dev/null || true
           cd dist && ditto -c -k --keepParent . ../RISACCA-macOS.zip
 
       - uses: actions/upload-artifact@v4
