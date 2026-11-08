@@ -28,6 +28,8 @@ juce_add_plugin(Risacca
     COMPANY_NAME "Collateral Effects"
     PRODUCT_NAME "RISACCA"
     ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon.png"
+    MICROPHONE_PERMISSION_ENABLED TRUE        # macOS: senza, la Standalone riceve solo silenzio dalla scheda audio
+    MICROPHONE_PERMISSION_TEXT "RISACCA usa l'ingresso della scheda audio per elaborare il segnale della chitarra."
     BUNDLE_ID "it.mminstruments.risacca"
     PLUGIN_MANUFACTURER_CODE Mmin
     PLUGIN_CODE Rsca

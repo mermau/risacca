@@ -8,6 +8,64 @@ juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter();
 int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI gui;
+    if (argc > 1 && juce::String (argv[1]) == "scenario")
+    {
+        // uso reale: parametri cambiati durante il suono, chitarra realistica sul canale 1
+        const double amp = argc > 2 ? std::atof (argv[2]) : 0.05;
+        std::unique_ptr<juce::AudioProcessor> q (createPluginFilter());
+        auto* rq = dynamic_cast<RisaccaAudioProcessor*> (q.get());
+        q->setPlayConfigDetails (2, 2, 48000.0, 256);
+        q->prepareToPlay (48000.0, 256);
+        auto set = [&] (const char* id, float v) { rq->apvts.getParameter (id)->setValueNotifyingHost (v); };
+        juce::AudioBuffer<float> b (2, 256); juce::MidiBuffer m;
+        double t = 0;
+        auto run = [&] (const char* label, double secs, bool guitar)
+        {
+            double sum = 0; long n = 0; double pk = 0;
+            for (int blk = 0; blk < (int) (secs * 48000 / 256); ++blk)
+            {
+                for (int i = 0; i < 256; ++i, t += 1.0 / 48000.0)
+                {
+                    const double tt = std::fmod (t, 0.5), ph = std::fmod (tt * 146.8, 1.0);
+                    const double x = guitar ? amp * std::exp (-tt * 4.0) * (std::sin (6.2831853 * ph) + 0.3 * std::sin (12.566 * ph)) : 0.0;
+                    b.setSample (0, i, (float) x); b.setSample (1, i, 0.0f);
+                }
+                q->processBlock (b, m);
+                for (int i = 0; i < 256; ++i) { const double y = b.getSample (0, i); sum += y * y; ++n; pk = std::max (pk, std::abs (y)); }
+            }
+            std::printf ("%-44s rms %6.1f dBFS  picco %.3f\n", label, 20 * std::log10 (std::sqrt (sum / n) + 1e-12), pk);
+        };
+        run ("di serie, silenzio", 2, false);
+        run ("di serie, chitarra", 3, true);
+        set ("selfOscSw", 1); run ("self-osc su, silenzio", 3, false);
+        run ("self-osc su, chitarra", 3, true);
+        set ("selfOscSw", 0); run ("self-osc giu, chitarra (subito)", 3, true);
+        run ("self-osc giu, chitarra (dopo 3 s)", 3, true);
+        run ("self-osc giu, silenzio", 2, false);
+        // griglia Noisegate x Swash con self-osc giu
+        for (float g : { 0.0f, 0.25f, 0.5f, 0.75f, 1.0f })
+        {
+            std::printf ("noisegate %.2f:", g);
+            for (float sw : { 0.0f, 0.25f, 0.5f, 0.75f, 1.0f })
+            {
+                set ("noisegate", g); set ("swash", sw);
+                double sum = 0; long n = 0;
+                for (int blk = 0; blk < (int) (1.5 * 48000 / 256); ++blk)
+                {
+                    for (int i = 0; i < 256; ++i, t += 1.0 / 48000.0)
+                    {
+                        const double tt = std::fmod (t, 0.5), ph = std::fmod (tt * 146.8, 1.0);
+                        b.setSample (0, i, (float) (amp * std::exp (-tt * 4.0) * std::sin (6.2831853 * ph))); b.setSample (1, i, 0.0f);
+                    }
+                    q->processBlock (b, m);
+                    if (blk > 90) for (int i = 0; i < 256; ++i) { sum += b.getSample (0, i) * b.getSample (0, i); ++n; }
+                }
+                std::printf ("  sw%.2f %6.1f", sw, 20 * std::log10 (std::sqrt (sum / n) + 1e-12));
+            }
+            std::printf ("\n");
+        }
+        return 0;
+    }
     if (argc > 1 && juce::String (argv[1]) == "input")
     {
         // chitarra solo sul canale 1 (come un ingresso mono della scheda audio), parametri di serie
