@@ -66,5 +66,6 @@ Al primo avvio la mappa CC è quella di una KeyLab mkII in modalità User:
 - **fader**: Bass, Treble, Clean, Mood CV, Swash CV.
 
 Ogni controllo (anche interruttori e pedale) si assegna con **tasto destro → MIDI Learn**.
+In Ableton il MIDI della KeyLab deve arrivare da una traccia MIDI con *MIDI To* sulla traccia di RISACCA (vedi il manuale, capitolo 7).
 
 Il manuale d'uso per musicisti è in `docs/RISACCA-Manuale-d-uso.pdf`; le note tecniche sul circuito e sul motore sono in `docs/MANUALE.md`.

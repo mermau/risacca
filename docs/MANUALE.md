@@ -26,9 +26,9 @@ Il plugin simula proprio questo circuito, componente per componente, a circa 192
    - `RISACCA.app` (versione standalone) dove preferisci
 3. I file sono firmati ad-hoc. Se macOS li blocca, esegui
    `xattr -cr ~/Library/Audio/Plug-Ins/VST3/RISACCA.vst3` (e lo stesso per `.component` e `.app`).
-4. In Ableton il plugin compare sotto **Collateral Effects**. Usalo come effetto audio. Il plugin
-   riceve anche il MIDI della KeyLab: nella traccia, imposta l'ingresso MIDI sulla tastiera e il
-   monitor su **In**.
+4. In Ableton il plugin compare sotto **Collateral Effects**. Usalo come effetto audio sulla traccia
+   della chitarra (preferibilmente la versione VST3). Una traccia audio non ha ingresso MIDI: per
+   la KeyLab vedi il capitolo 5.
 
 ## 3. Il frontale
 
@@ -131,6 +131,15 @@ CC 80) o per automazioni a scalino.
 
 **Tasto destro** su qualunque comando (anche levette, pulsante a pedale e comandi del pannello CV)
 → **MIDI Learn** → muovi un controllo della KeyLab. Le assegnazioni si salvano nel progetto.
+
+**In Ableton Live** il MIDI deve arrivare da una traccia MIDI:
+
+1. Preferenze → Link, Tempo e MIDI: attiva **Track** sulla porta MIDI della KeyLab (non su quella DAW).
+2. Crea una traccia MIDI con *MIDI From* = KeyLab e *Monitor* = **In**.
+3. In *MIDI To* scegli la traccia audio con RISACCA e, nel menu sotto, **RISACCA**.
+
+In alternativa si può usare la mappatura MIDI di Live (Cmd+M, con *Remote* attivo sulla porta
+della KeyLab), che però esclude la mappa e il learn del plugin.
 
 Mappa iniziale (KeyLab mkII, modalità User):
 
